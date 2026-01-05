@@ -538,7 +538,9 @@ def evaluate_single_snr(
                     
                     # 逐帧合并，重建视频
                     reconstructed_video = merge_video_v2(reconstructed_patches_by_frame, meta_list)
-                    reconstructed_video = reconstructed_video.unsqueeze(0).to(device)  # [1, T, C, H, W]
+                    # merge_video_v2 already restores the batch dimension when needed,
+                    # so avoid an extra unsqueeze that would introduce a spurious dimension.
+                    reconstructed_video = reconstructed_video.to(device)
                     
                     # 保存视频结果
                     results['video_decoded'] = reconstructed_video
