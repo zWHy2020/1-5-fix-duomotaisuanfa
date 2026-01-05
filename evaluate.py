@@ -455,7 +455,9 @@ def evaluate_single_snr(
                     logger.debug(f"检测到非标准尺寸视频: {T}帧, {H}x{W}, 使用 patch-based 推理")
                     
                     # 分割视频（逐帧处理）
-                    patches_list, meta_list = split_video_v2(video, config.patch_size, config.patch_overlap)
+                    # 与模型期望的输入尺寸对齐，使用 image_encoder/video_encoder 的 img_size 作为 patch_size
+                    patch_size = expected_h
+                    patches_list, meta_list = split_video_v2(video, patch_size, config.patch_overlap)
                     
                     # 收集所有帧的所有patches（用于批量推理）
                     all_patches = []
@@ -570,7 +572,9 @@ def evaluate_single_snr(
                     logger.debug(f"检测到非标准尺寸图像: {img.shape[2]}x{img.shape[3]}, 使用 patch-based 推理")
                     
                     # 分割图像
-                    patches, meta = split_image_v2(img, config.patch_size, config.patch_overlap)
+                    # 与模型期望的输入尺寸对齐，使用 image_encoder 的 img_size 作为 patch_size
+                    patch_size = expected_h
+                    patches, meta = split_image_v2(img, patch_size, config.patch_overlap)
                     patches = patches.to(device)
                     
                     logger.debug(f"图像分割为 {len(patches)} 个 patches")
