@@ -114,12 +114,23 @@ class EvaluationDataset(Dataset):
                 text = text_info['text']
             
             if self.text_tokenizer:
-                tokens = self.text_tokenizer.encode(text, max_length=self.max_text_length, truncation=True)
-                input_ids = torch.tensor(tokens['input_ids'], dtype=torch.long)
-                attention_mask = torch.tensor(tokens['attention_mask'], dtype=torch.long)
+                tokens = self.text_tokenizer(
+                    text,
+                    max_length=self.max_text_length,
+                    truncation=True,
+                    padding="max_length",
+                    return_tensors="pt"
+                )
+                input_ids = tokens["input_ids"].squeeze(0)
+                attention_mask = tokens["attention_mask"].squeeze(0)
             else:
-                input_ids = torch.tensor([ord(c) for c in text[:self.max_text_length]], dtype=torch.long)
-                attention_mask = torch.ones_like(input_ids)
+                encoded = [ord(c) for c in text[: self.max_text_length]]
+                input_ids = torch.tensor(encoded, dtype=torch.long)
+                pad_len = self.max_text_length - input_ids.shape[0]
+                if pad_len > 0:
+                    input_ids = torch.cat([input_ids, torch.zeros(pad_len, dtype=torch.long)], dim=0)
+                attention_mask = torch.zeros(self.max_text_length, dtype=torch.long)
+                attention_mask[: len(encoded)] = 1
             
             return {
                 'input_ids': input_ids,
@@ -364,11 +375,8 @@ def evaluate_single_snr(
     # 设置模型SNR
     model.set_snr(snr_db)
     
-    # 收集所有预测和目标用于批量计算指标
-    all_predictions = {}
-    all_targets = {}
-    all_masks = []
-    
+    # 按样本累计指标，避免跨样本拼接不同尺寸的张量
+    metrics_accumulator: Dict[str, List[float]] = {}
     sample_count = 0
     
     with torch.no_grad():
@@ -654,19 +662,20 @@ def evaluate_single_snr(
                         results[key] = value
             
             # 收集预测和目标
-            for key in results:
-                if key.endswith('_decoded'):
-                    if key not in all_predictions:
-                        all_predictions[key] = []
-                    all_predictions[key].append(results[key].cpu())
+            current_metrics = {}
+            try:
+                current_metrics = calculate_multimodal_metrics(
+                    predictions=results,
+                    targets=device_targets,
+                    attention_mask=attention_mask
+                )
+            except Exception as e:
+                logger.error(f\"计算当前批次评估指标时出错: {e}\")
+                import traceback
+                logger.error(traceback.format_exc())
             
-            for key in device_targets:
-                if key not in all_targets:
-                    all_targets[key] = []
-                all_targets[key].append(device_targets[key].cpu())
-            
-            if attention_mask is not None:
-                all_masks.append(attention_mask.cpu())
+            for metric_name, metric_value in current_metrics.items():
+                metrics_accumulator.setdefault(metric_name, []).append(metric_value)
             
             # 更新样本计数
             # 注意：image_input和video_input可能在patch处理后被设置为None
@@ -686,37 +695,20 @@ def evaluate_single_snr(
             
             # 打印进度
             if (batch_idx + 1) % 10 == 0:
-                logger.info(f"处理进度: {batch_idx + 1}/{len(test_loader)} batches, {sample_count} 样本")
+                logger.info(f\"处理进度: {batch_idx + 1}/{len(test_loader)} batches, {sample_count} 样本\")
     
-    # 合并所有预测和目标
-    combined_predictions = {}
-    combined_targets = {}
+    # 计算所有样本的平均指标
+    if not metrics_accumulator:
+        logger.warning(\"未累积到任何评估指标，返回空结果。可能数据集中缺少可用样本。\") 
+        return {}
     
-    for key in all_predictions:
-        combined_predictions[key] = torch.cat(all_predictions[key], dim=0)
+    averaged_metrics = {}
+    for metric_name, values in metrics_accumulator.items():
+        if len(values) == 0:
+            continue
+        averaged_metrics[metric_name] = float(torch.tensor(values).mean().item())
     
-    for key in all_targets:
-        combined_targets[key] = torch.cat(all_targets[key], dim=0)
-    
-    combined_mask = None
-    if all_masks:
-        combined_mask = torch.cat(all_masks, dim=0)
-    
-    # 计算评估指标
-    logger.info(f"计算SNR={snr_db}dB下的评估指标...")
-    try:
-        metrics_dict = calculate_multimodal_metrics(
-            predictions=combined_predictions,
-            targets=combined_targets,
-            attention_mask=combined_mask
-        )
-    except Exception as e:
-        logger.error(f"计算评估指标时出错: {e}")
-        import traceback
-        logger.error(traceback.format_exc())
-        metrics_dict = {}
-    
-    return metrics_dict
+    return averaged_metrics
 
 
 def print_results_table(
