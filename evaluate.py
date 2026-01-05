@@ -569,7 +569,8 @@ def evaluate_single_snr(
                     # 注意：由于 batch_size=1，这里 B 总是 1
                     img = image_input[0]  # [C, H, W] - 去除 batch 维度
                     
-                    logger.debug(f"检测到非标准尺寸图像: {img.shape[2]}x{img.shape[3]}, 使用 patch-based 推理")
+                    # img 维度为 [C, H, W]，索引应使用 1/2 分别表示高和宽
+                    logger.debug(f"检测到非标准尺寸图像: {img.shape[1]}x{img.shape[2]}, 使用 patch-based 推理")
                     
                     # 分割图像
                     # 与模型期望的输入尺寸对齐，使用 image_encoder 的 img_size 作为 patch_size
