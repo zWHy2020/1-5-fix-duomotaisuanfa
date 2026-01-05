@@ -670,7 +670,7 @@ def evaluate_single_snr(
                     attention_mask=attention_mask
                 )
             except Exception as e:
-                logger.error(f\"计算当前批次评估指标时出错: {e}\")
+                logger.error(f"计算当前批次评估指标时出错: {e}")
                 import traceback
                 logger.error(traceback.format_exc())
             
@@ -695,11 +695,11 @@ def evaluate_single_snr(
             
             # 打印进度
             if (batch_idx + 1) % 10 == 0:
-                logger.info(f\"处理进度: {batch_idx + 1}/{len(test_loader)} batches, {sample_count} 样本\")
+                logger.info(f"处理进度: {batch_idx + 1}/{len(test_loader)} batches, {sample_count} 样本")
     
     # 计算所有样本的平均指标
     if not metrics_accumulator:
-        logger.warning(\"未累积到任何评估指标，返回空结果。可能数据集中缺少可用样本。\") 
+        logger.warning("未累积到任何评估指标，返回空结果。可能数据集中缺少可用样本。") 
         return {}
     
     averaged_metrics = {}
