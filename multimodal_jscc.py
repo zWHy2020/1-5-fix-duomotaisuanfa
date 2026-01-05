@@ -166,12 +166,15 @@ class MultimodalJSCC(nn.Module):
         self.condition_only_low_snr = condition_only_low_snr
         self.condition_low_snr_threshold = condition_low_snr_threshold
         
-        # 功率归一化
-        #self.power_normalizer = nn.ModuleDict({
-            #'text': nn.LayerNorm(text_output_dim),
-            #'image': nn.LayerNorm(img_output_dim),
-            #'video': nn.LayerNorm(video_output_dim)
-        #})
+        # 功率归一化模块（可选）
+        # 始终创建属性以便在评估/推理阶段安全访问
+        self.power_normalizer = nn.ModuleDict()
+        if power_normalization:
+            self.power_normalizer.update({
+                'text': nn.LayerNorm(text_output_dim),
+                'image': nn.LayerNorm(img_output_dim),
+                'video': nn.LayerNorm(video_output_dim)
+            })
     
     def forward(
         self,
